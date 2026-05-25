@@ -7,15 +7,21 @@ import { createServer as createViteServer } from 'vite';
 // Load environment variables
 dotenv.config();
 
-// Initialize Gemini client
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    }
+function createGeminiClient() {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return null;
   }
-});
+
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      }
+    }
+  });
+}
 
 async function startServer() {
   const app = express();
@@ -27,6 +33,14 @@ async function startServer() {
   // Photo observation helper endpoint
   app.post('/api/analyze-pigeon', async (req, res) => {
     try {
+      const ai = createGeminiClient();
+      if (!ai) {
+        return res.status(503).json({
+          status: 'error',
+          message: '目前尚未設定服務金鑰，暫時無法使用照片整理功能。'
+        });
+      }
+
       const { base64Image } = req.body;
       if (!base64Image) {
         return res.status(400).json({ status: 'error', message: '未提供圖片資料' });
