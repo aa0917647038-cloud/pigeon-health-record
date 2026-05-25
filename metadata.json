@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Simple Pigeon Health Tracker",
+  "description": "Record racing pigeon health with large buttons and band numbers. Designed for elderly users to easily track daily status.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
