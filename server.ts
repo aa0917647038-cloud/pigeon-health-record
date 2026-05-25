@@ -19,7 +19,7 @@ const ai = new GoogleGenAI({
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   // Maximum payload size for high-res base64 images
   app.use(express.json({ limit: '10mb' }));
