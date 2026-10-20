@@ -25,6 +25,7 @@ const LEVEL_STYLE: Record<PlanLevel, { card: string; badge: string; text: string
 };
 
 interface TodoCardProps {
+  key?: string; // 清單用的識別碼，專案沒裝 React 型別時也要能通過檢查
   item: TodoItem;
   onToggleDone: (id: string) => void;
   onDelete?: (id: string) => void; // 首頁的小卡不放刪除
