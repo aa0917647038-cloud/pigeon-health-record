@@ -1,4 +1,4 @@
-import { StatusConfig } from './types';
+import { StatusConfig, RecordPhase, PlanKind } from './types';
 
 // 三種觀察分類：顏色固定為 綠（正常）／黃（稍有不同）／紅（明顯不同），全站一致
 export const STATUSES: StatusConfig[] = [
@@ -65,3 +65,43 @@ export const SUGGESTED_RING_PATTERNS = [
   'TAIWAN-',
   '2026-'
 ];
+
+// 記錄時間點：可不選，沒選就當「平常」
+export const PHASES: { key: RecordPhase; label: string }[] = [
+  { key: 'usual', label: '平常' },
+  { key: 'before', label: '出賽前' },
+  { key: 'after', label: '出賽後' }
+];
+
+// 每個提醒畫面固定要有的說明
+export const CARE_DISCLAIMER = '本提醒僅依您輸入的日期計算，不能取代獸醫診斷。';
+
+// 用藥／疫苗兩種計畫的文字
+export const PLAN_KINDS: Record<PlanKind, {
+  label: string;
+  dueLabel: string; // 到期那天叫什麼
+  startLabel: string;
+  daysLabel: string;
+  nameLabel: string;
+  namePlaceholder: string;
+  maxDays: number;
+}> = {
+  medication: {
+    label: '用藥',
+    dueLabel: '停藥日',
+    startLabel: '第一天是哪天',
+    daysLabel: '連續幾天',
+    nameLabel: '藥名',
+    namePlaceholder: '照包裝上的名稱自己填',
+    maxDays: 60
+  },
+  vaccine: {
+    label: '疫苗',
+    dueLabel: '補打日',
+    startLabel: '接種日是哪天',
+    daysLabel: '幾天後補打',
+    nameLabel: '疫苗名稱',
+    namePlaceholder: '照包裝上的名稱自己填',
+    maxDays: 365
+  }
+};

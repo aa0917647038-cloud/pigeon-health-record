@@ -20,12 +20,16 @@ import {
   CheckCircle2,
   Eye,
   AlertTriangle,
-  Pencil
+  Pencil,
+  Pill
 } from 'lucide-react';
-import { HealthStatus, PigeonRecord } from './types';
-import { STATUSES, STATUS_SOFT, QUICK_NOTES } from './constants';
+import { HealthStatus, PigeonRecord, RecordPhase, CarePlan } from './types';
+import { STATUSES, STATUS_SOFT, QUICK_NOTES, PHASES, CARE_DISCLAIMER } from './constants';
+import MedicationPage, { TodoCard } from './pages/MedicationPage';
+import { toDateStr, buildTodoList, isValidPlan } from './lib/reminders';
 
 const STORAGE_KEY = 'pigeon_health_records';
+const PLANS_KEY = 'pigeon_care_plans'; // 用藥／疫苗提醒，和健康紀錄分開存
 const DEMO_IDS = ['demo-1', 'demo-2']; // 舊版自動塞入的範例資料，不顯示給使用者
 const VALID_STATUSES: HealthStatus[] = ['normal', 'attention', 'abnormal'];
 
@@ -58,6 +62,12 @@ export default function App() {
   const [notes, setNotes] = useState('');
   const [photo, setPhoto] = useState<string | null>(null);
   const [records, setRecords] = useState<PigeonRecord[]>([]);
+  const [phase, setPhase] = useState<RecordPhase>('usual');
+
+  // --- 用藥／疫苗提醒 ---
+  const [plans, setPlans] = useState<CarePlan[]>([]);
+  const [tab, setTab] = useState<'record' | 'care'>('record');
+  const [todayStr, setTodayStr] = useState(() => toDateStr(new Date()));
 
   // --- 畫面狀態 ---
   const [stage, setStage] = useState<Stage>('idle');
@@ -104,6 +114,55 @@ export default function App() {
       console.warn('LocalStorage save failed:', e);
       return false;
     }
+  };
+
+  // 讀取用藥／疫苗提醒（資料壞掉的那幾筆直接略過，不影響其他）
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(PLANS_KEY);
+      if (stored) {
+        const parsed: unknown = JSON.parse(stored);
+        if (Array.isArray(parsed)) setPlans(parsed.filter(isValidPlan));
+      }
+    } catch (e) {
+      console.error('Failed to load care plans:', e);
+    }
+  }, []);
+
+  // App 開著跨過午夜，或從別的畫面切回來時，更新「今天」是幾號
+  useEffect(() => {
+    const refresh = () => setTodayStr(toDateStr(new Date()));
+    document.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      document.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, []);
+
+  const savePlans = (next: CarePlan[]): boolean => {
+    try {
+      localStorage.setItem(PLANS_KEY, JSON.stringify(next));
+      setPlans(next);
+      return true;
+    } catch (e) {
+      console.warn('LocalStorage save plans failed:', e);
+      return false;
+    }
+  };
+
+  const addPlan = (plan: CarePlan): boolean => savePlans([plan, ...plans]);
+
+  const togglePlanDone = (id: string) => {
+    const next = plans.map(p =>
+      p.id === id ? { ...p, doneAt: p.doneAt ? undefined : new Date().toISOString() } : p
+    );
+    if (!savePlans(next)) showToast('手機空間不夠，這次沒有存到。請先刪掉幾筆舊的。');
+  };
+
+  const deletePlan = (id: string) => {
+    if (savePlans(plans.filter(p => p.id !== id))) showToast('已刪除');
+    else showToast('手機空間不夠，這次沒有刪成功。');
   };
 
   // 語音輸入（備註用）
@@ -245,6 +304,7 @@ export default function App() {
     setRingNumber('');
     setSelectedStatus(null);
     setNotes('');
+    setPhase('usual');
     setPhoto(null);
     setObservation(null);
     setAiFailed(false);
@@ -272,7 +332,8 @@ export default function App() {
       notes: notes.trim(),
       photoUrl: photo || undefined,
       timestamp: new Date().toISOString(),
-      isActionRequired: selectedStatus !== 'normal'
+      isActionRequired: selectedStatus !== 'normal',
+      ...(phase !== 'usual' ? { phase } : {}) // 平常就不寫這個欄位，和舊紀錄一樣
     };
     if (saveRecords([rec, ...records])) {
       showToast(`已儲存 ${rec.ringNumber}`);
@@ -305,6 +366,7 @@ export default function App() {
   const shownRecords = listScope === 'today' ? todayRecords : records;
   const recentRings = Array.from(new Set(records.map(r => r.ringNumber))).slice(0, 6);
   const current = statusOf(selectedStatus);
+  const todoItems = buildTodoList(plans, todayStr); // 已過期、7 天內要處理的用藥／疫苗
 
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 text-lg pb-16">
@@ -343,6 +405,86 @@ export default function App() {
           capture="environment"
           className="hidden"
         />
+
+        {/* 頁籤：拍照記錄／用藥疫苗 */}
+        <nav className="grid grid-cols-2 gap-2" aria-label="功能選單">
+          <button
+            type="button"
+            onClick={() => setTab('record')}
+            aria-current={tab === 'record' ? 'page' : undefined}
+            className={`py-4 rounded-2xl border-2 font-black text-xl flex items-center justify-center gap-2 select-none ${
+              tab === 'record' ? 'bg-amber-700 text-white border-transparent shadow-md' : 'bg-white text-stone-700 border-stone-300'
+            }`}
+          >
+            <Camera className="w-6 h-6" />拍照記錄
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('care')}
+            aria-current={tab === 'care' ? 'page' : undefined}
+            className={`py-4 rounded-2xl border-2 font-black text-xl flex items-center justify-center gap-2 select-none ${
+              tab === 'care' ? 'bg-amber-700 text-white border-transparent shadow-md' : 'bg-white text-stone-700 border-stone-300'
+            }`}
+          >
+            <Pill className="w-6 h-6" />用藥疫苗
+            {todoItems.length > 0 && (
+              <span
+                className={`min-w-7 h-7 px-2 rounded-full text-base font-black flex items-center justify-center ${
+                  tab === 'care' ? 'bg-white text-amber-900' : 'bg-rose-600 text-white'
+                }`}
+                aria-label={`${todoItems.length} 項要處理`}
+              >
+                {todoItems.length}
+              </span>
+            )}
+          </button>
+        </nav>
+
+        {/* 用藥疫苗頁 */}
+        {tab === 'care' && (
+          <MedicationPage
+            plans={plans}
+            today={todayStr}
+            onAdd={addPlan}
+            onToggleDone={togglePlanDone}
+            onDelete={deletePlan}
+            notify={showToast}
+          />
+        )}
+
+        {/* 拍照記錄頁（切到用藥疫苗時只是藏起來，填到一半的內容不會掉） */}
+        <div className={tab === 'record' ? 'space-y-6' : 'hidden'}>
+
+        {/* 今天要做的事：只在第一畫面顯示，不擋住拍照鈕太多 */}
+        {stage === 'idle' && todoItems.length > 0 && (
+          <section className="space-y-3" aria-label="今天要做的事">
+            <h2 className="text-2xl font-black">今天要做的事</h2>
+            <ul className="space-y-3">
+              {todoItems.slice(0, 2).map(item => (
+                <TodoCard key={item.plan.id} item={item} onToggleDone={togglePlanDone} />
+              ))}
+            </ul>
+            {todoItems.length > 2 && (
+              <button
+                type="button"
+                onClick={() => setTab('care')}
+                className="w-full py-3 rounded-2xl border-2 border-stone-300 bg-white text-stone-700 font-bold text-lg active:bg-stone-100"
+              >
+                還有 {todoItems.length - 2} 項，看全部
+              </button>
+            )}
+            <p className="text-center text-sm text-stone-500 leading-relaxed">{CARE_DISCLAIMER}</p>
+          </section>
+        )}
+        {stage === 'idle' && plans.length === 0 && (
+          <button
+            type="button"
+            onClick={() => setTab('care')}
+            className="w-full py-4 rounded-2xl border-2 border-dashed border-amber-400 bg-amber-50 text-amber-900 font-black text-lg flex items-center justify-center gap-2 active:bg-amber-100"
+          >
+            <Pill className="w-6 h-6" />設定用藥、疫苗提醒
+          </button>
+        )}
 
         {/* 第一畫面：只有一顆大拍照鈕 */}
         {stage === 'idle' && (
@@ -522,6 +664,29 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* 記錄時間點（可不選，不選就是平常） */}
+                <div className="space-y-3">
+                  <h2 className="text-xl font-black">這是什麼時候的記錄</h2>
+                  <div className="grid grid-cols-3 gap-2">
+                    {PHASES.map(p => {
+                      const on = phase === p.key;
+                      return (
+                        <button
+                          key={p.key}
+                          type="button"
+                          onClick={() => setPhase(p.key)}
+                          className={`rounded-2xl border-2 py-4 px-1 font-black text-lg select-none ${
+                            on ? 'bg-stone-800 text-white border-transparent shadow-md' : 'bg-white text-stone-700 border-stone-300'
+                          }`}
+                          aria-pressed={on}
+                        >
+                          {p.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* 備註 */}
                 <div className="space-y-3">
                   <h2 className="text-xl font-black">備註（可不填）</h2>
@@ -625,6 +790,11 @@ export default function App() {
                               {s.label}
                             </span>
                           )}
+                          {rec.phase && rec.phase !== 'usual' && (
+                            <span className="px-2.5 py-1 rounded-full border border-stone-300 bg-stone-100 text-base font-bold text-stone-700">
+                              {PHASES.find(p => p.key === rec.phase)?.label}
+                            </span>
+                          )}
                           <span className="text-base text-stone-500">{when}</span>
                         </div>
                         {rec.notes && <p className="text-base leading-relaxed text-stone-700">{rec.notes}</p>}
@@ -655,6 +825,7 @@ export default function App() {
             <li>外觀、站姿、大便樣子都可以拍，方便之後比對</li>
           </ul>
         </details>
+        </div>
       </main>
 
       <footer className="max-w-xl mx-auto px-4 mt-10 text-center text-sm text-stone-500 leading-relaxed">
