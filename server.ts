@@ -85,7 +85,8 @@ async function startServer() {
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
+        // 模型名稱可在 Render 環境變數 GEMINI_MODEL 直接更換，不用改程式
+        model: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
         contents: {
           parts: [
             imagePart,
